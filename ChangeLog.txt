@@ -1,0 +1,13 @@
+> Vytvořen createEstimationsFile.ps1, který vytvoří datový zdroj pro estimations, a to data_merged_estimations.txt
+> Zkontroluje na začátku, jestli chybí soubory, pokud ano, napíše to které a ptá se uživatele, jestli chce pokračovat
+>> OK => skript pokračuje a vytvoří datové soubory z těch souborů, které tam jsou
+>> Cancel => ukončí proces
+
+> Makro nyní vytváří nový report pro Estimations, a to se vstupním parametrem a kontrolou existujícího soubotu "data_merged_estimations.txt"
+> Vytvoří i záložku SalesIncome a provede veškeré propočty, jako u Sales reportu
+>> prozatím nekoupíruje data, resp. pokud SalesIncome.xlsx neexistuje, vytvoří jen záložku (která je potřebná pro funkčnost výpočtů)
+
+> Opravena "chyba" při vytváření nového SalesIncome v subsekventních metodách, nyní přepíše stávající soubor za nový bez dotazu na uživatele
+
+>> 22.09.2020
+>>> Rezervy makro nyní přejímá z PIVOT tabulky, pokud nejsou dokumenty k dispozici, buňka je zaplněna REF chybou
