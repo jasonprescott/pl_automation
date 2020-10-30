@@ -1,0 +1,7 @@
+>> 06.10.2020
+Corrected the 2nd column from the right to be properly matching the code
+
+>>> Created a script 'getExchangeRate.ps1' which asks you a date to which you want to know the currency exchange and the target currency
+>>> by now it only works with the EUR as a base currency (for the current month and only 1000 calls per month)
+>>> then it saves it to your current location as a exchangeRate.txt file where the rate is an input value
+>>> the furthest date is a year 1999

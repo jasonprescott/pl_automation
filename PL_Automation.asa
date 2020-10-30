@@ -1,0 +1,1392 @@
+Sub CreateStatisticalData()
+    
+    Dim fileNameReserves As String
+    Dim fileNameSales As String
+    Dim fileNameEstimations As String
+    Dim invCrnData As Variant
+    Dim fileSize As Long
+    Dim reservesFileExists As String
+    Dim estimationsFileExists As String
+    Dim salesFileExists As String
+    
+    'Check if the sales file eixsts
+    fileNameSales = "C:\dagama\data_merged.txt"
+    salesFileExists = Dir(fileNameSales)
+
+    'Check if the reserves file exists
+    fileNameReserves = "C:\dagama\data_reserves_merged.txt"
+    reservesFileExists = Dir(fileNameReserves)
+    
+    'Check if the estimations file exists
+    fileNameEstimations = "C:\dagama\data_merged_estimations.txt"
+    estimationsFileExists = Dir(fileNameEstimations)
+
+    'If the sales file exists, invoke the creation of the Invoices data file and a Sales report
+    If salesFileExists <> "" Then
+        invCrnData = OpenInvCrnFile()
+        TestOpenFixedWidthFile "base"
+        createPivotTable 1, invCrnData
+    End If
+    
+    'If the reserves file exists, invoke the creation of the Reserves report
+    If reservesFileExists <> "" Then
+        TestOpenFixedWidthFile "reserves"
+        createPivotTable 2, ""
+    End If
+    
+    'If the estimations file exists, invoke the creation of the Estimations report
+    If estimationsFileExists <> "" Then
+        TestOpenFixedWidthFile "estimations"
+        createPivotTable 3, ""
+    End If
+    
+End Sub
+
+Sub TestOpenFixedWidthFile(dataFile As String)
+    'A method which opens a previously defined text file with a fixed columns width
+    Dim myWorkbook As Workbook
+    Dim vFields As Variant
+    Dim myFile As String
+    Dim colNames As Variant
+    
+    'Definition of the fields in the report data sheet with their exact positions
+    vFields = Array(Array(0, xlGeneralFormat), Array(1, xlGeneralFormat), Array(8, xlGeneralFormat), Array(20, xlGeneralFormat), Array(27, xlGeneralFormat), _
+    Array(51, xlGeneralFormat), Array(54, xlGeneralFormat), Array(57, xlGeneralFormat), Array(103, xlGeneralFormat), Array(107, xlGeneralFormat), _
+    Array(109, xlGeneralFormat), Array(111, xlGeneralFormat), Array(115, xlGeneralFormat), Array(117, xlGeneralFormat), Array(129, xlGeneralFormat), _
+    Array(140, xlGeneralFormat), Array(160, xlGeneralFormat), Array(172, xlGeneralFormat), Array(180, xlGeneralFormat), Array(222, xlGeneralFormat))
+    
+    'Depending on which data source file is being operated with chooses a related one to be opened
+    If dataFile = "base" Then
+        Set myWorkbook = OpenFixedWidthFile("C:\dagama\data_merged.txt", 1, vFields)
+    ElseIf dataFile = "reserves" Then
+        Set myWorkbook = OpenFixedWidthFile("C:\dagama\data_reserves_merged.txt", 1, vFields)
+    ElseIf dataFile = "estimations" Then
+        Set myWorkbook = OpenFixedWidthFile("C:\dagama\data_merged_estimations.txt", 1, vFields)
+    End If
+       
+    'A call for the AddHeaders method which adds headers to the data sheet 
+    AddHeaders
+    
+    'Select columns P to Q and set a number format for them
+    Columns("P:Q").Select
+    Selection.NumberFormat = "#,##0.00"
+    
+    'Fill in the documentField
+    If (dataFile = "base") Then
+        fillInDocumentField 1
+    ElseIf (dataFile = "reserves") Then
+        fillInDocumentField 2
+    ElseIf (dataFile = "estimations") Then
+        fillInDocumentField 3
+    End If
+    
+    'Calculate additional fields according to which report type is being created
+    If (dataFile = "base") Then
+        calculateFields 1
+    ElseIf (dataFile = "reserves") Then
+        calculateFields 2
+    ElseIf dataFile = "estimations" Then
+        calculateFields 3
+    End If
+    
+    'Select columns A to S and autoFit them
+    Columns("A:S").Select
+    Selection.EntireColumn.AutoFit
+    
+    'Set the Horizontal and Vertical alignment for columns B, C & D to Center
+    ActiveSheet.Columns("B").VerticalAlignment = xlVAlignCenter
+    ActiveSheet.Columns("B").HorizontalAlignment = xlHAlignRight
+    
+    ActiveSheet.Columns("C").VerticalAlignment = xlVAlignCenter
+    ActiveSheet.Columns("C").HorizontalAlignment = xlHAlignRight
+    
+    ActiveSheet.Columns("D").VerticalAlignment = xlVAlignCenter
+    ActiveSheet.Columns("D").HorizontalAlignment = xlHAlignCenter
+    
+    ActiveSheet.Range(Cells(1, 1), Cells(1, 19)).HorizontalAlignment = xlHAlignCenter
+    
+    'Unassign the Workbook variable
+    Set myWorkbook = Nothing
+End Sub
+
+
+Public Function OpenInvCrnFile() As Variant
+    'A procedure to open and save the Invoices file
+
+    'Define variables
+    Dim myWorkbook As Workbook
+    Dim vFields As Variant
+    Dim myFile As String
+    Dim colNames As Variant
+    Dim sFound As String
+
+    'Create the retuning variable for the function
+    Dim returnArray As Variant
+    ReDim returnArray(0 To 3)
+
+    'Assign variable sFound as the file name for the invoices text file if one exists
+    sFound = Dir(ActiveWorkbook.Path & "\invoices_creditnotes*.txt")    'the first one found
+    
+    'Get the file name without the extension
+    sFileName = Left(sFound, Len(sFound) - 4)
+
+    'Get the Sheet name for the use in other methods by removing the extension and a date
+    sSheetName = Left(sFileName, Len(sFileName) - 7)
+
+    'If the file is found, then open it as a Delimited text file
+        If sFound <> "" Then
+            Application.Workbooks.OpenText fileName:=ActiveWorkbook.Path & "\" & sFound, _
+            Origin:=852, StartRow:=1, DataType:=xlDelimited, TextQualifier:= _
+            xlDoubleQuote, ConsecutiveDelimiter:=False, Tab:=False, Semicolon:=True, _
+            Comma:=False, Space:=False, Other:=False
+        
+    'Define the columns names for this data file  
+        colNames = Array("Agent", "Doc #", "Comm", "Prem", "Currency", "TO")
+        
+            If IsEmpty(Range("A1")) Then
+                Range("A1").Resize(1, UBound(colNames) + 1).Value = colNames
+            Else: Range("A1").EntireRow.Insert
+                Range("A1").Resize(1, UBound(colNames) + 1).Value = colNames
+            End If
+    
+    'Format cells and columns    
+        Columns("C:D").Select
+        Selection.NumberFormat = "#,##0.00"
+            
+        Columns("A:F").Select
+        Selection.EntireColumn.AutoFit
+        
+        ActiveSheet.Columns("B").VerticalAlignment = xlVAlignCenter
+        ActiveSheet.Columns("B").HorizontalAlignment = xlHAlignRight
+        
+        ActiveSheet.Columns("C").VerticalAlignment = xlVAlignCenter
+        ActiveSheet.Columns("C").HorizontalAlignment = xlHAlignRight
+        
+        ActiveSheet.Columns("D").VerticalAlignment = xlVAlignCenter
+        ActiveSheet.Columns("D").HorizontalAlignment = xlHAlignCenter
+        
+        ActiveSheet.Range(Cells(1, 1), Cells(1, 19)).HorizontalAlignment = xlHAlignCenter
+        
+        'Set the sheetName
+        Sheets(1).Name = sSheetName
+        
+        'Invoke the InvCrnPivotTable method which creates a pivot table
+        InvCrnPivotTable
+        
+        'Load the required data to variables
+        invCrnEurPrem = ActiveSheet.Cells(4, 3).Value
+        invCrnEurComm = ActiveSheet.Cells(4, 4).Value
+        
+        invCrnPlnPrem = ActiveSheet.Cells(5, 3).Value
+        invCrnPlnComm = ActiveSheet.Cells(5, 4).Value
+        
+        'Fill the returnArray with values
+        returnArray(0) = invCrnEurPrem
+        returnArray(1) = invCrnEurComm
+        returnArray(2) = invCrnPlnPrem
+        returnArray(3) = invCrnPlnComm
+        
+        'Save forcedly the file, if it exists, overwrite it
+        Application.DisplayAlerts = False
+        
+        ActiveWorkbook.SaveAs ("C:\dagama\" & sFileName), FileFormat:=51, AccessMode:=xlExclusive, ConflictResolution:=Excel.XlSaveConflictResolution.xlLocalSessionChanges
+        
+        ActiveWorkbook.Save
+        
+        Application.DisplayAlerts = True
+        
+        End If
+    
+    'Output Array
+    OpenInvCrnFile = returnArray
+    
+    Set myWorkbook = Nothing
+    
+End Function
+
+Sub InvCrnPivotTable()
+'
+' invCrnPivotTable method to create a pivot table for the Invoices data file
+'
+
+'
+    'Declare Variables
+    Dim PSheet As Worksheet
+    Dim DSheet As Worksheet
+    Dim PCache As PivotCache
+    Dim PTable As pivotTable
+    Dim PRange As Range
+    Dim lastRow As Long
+    Dim LastCol As Long
+      
+    'Declare Variables
+    On Error Resume Next
+    Application.DisplayAlerts = False
+    Worksheets("PivotTable").Delete
+    Sheets.Add Before:=ActiveSheet
+    ActiveSheet.Name = "PivotTable"
+    Application.DisplayAlerts = True
+    Set PSheet = Worksheets("PivotTable")
+    
+    Set DSheet = Worksheets("invoices_creditnotes")
+    
+    'Define Data Range
+    lastRow = DSheet.Cells(Rows.Count, 1).End(xlUp).Row
+    LastCol = DSheet.Cells(1, Columns.Count).End(xlToLeft).Column
+    Set PRange = DSheet.Cells(1, 1).Resize(lastRow, LastCol)
+          
+    'Define Pivot Cache
+    Set PCache = ActiveWorkbook.PivotCaches.Create _
+    (SourceType:=xlDatabase, SourceData:=PRange). _
+    createPivotTable(TableDestination:=PSheet.Cells(2, 2), _
+    TableName:="InvCrnPivotTable")
+    
+    'Insert Blank Pivot Table
+    Set PTable = PCache.createPivotTable _
+    (TableDestination:=PSheet.Cells(1, 1), TableName:="InvCrnPivotTable")
+    
+    'Define the PivotTable and initiate its creation
+    With ActiveSheet.PivotTables("InvCrnPivotTable")
+        .ColumnGrand = True
+        .HasAutoFormat = True
+        .DisplayErrorString = False
+        .DisplayNullString = True
+        .EnableDrilldown = True
+        .ErrorString = ""
+        .MergeLabels = False
+        .NullString = ""
+        .PageFieldOrder = 2
+        .PageFieldWrapCount = 0
+        .PreserveFormatting = True
+        .RowGrand = True
+        .SaveData = True
+        .PrintTitles = False
+        .RepeatItemsOnEachPrintedPage = True
+        .TotalsAnnotation = False
+        .CompactRowIndent = 1
+        .InGridDropZones = False
+        .DisplayFieldCaptions = True
+        .DisplayMemberPropertyTooltips = False
+        .DisplayContextTooltips = True
+        .ShowDrillIndicators = True
+        .PrintDrillIndicators = False
+        .AllowMultipleFilters = False
+        .SortUsingCustomLists = True
+        .FieldListSortAscending = False
+        .ShowValuesRow = False
+        .CalculatedMembersInFilters = False
+        .RowAxisLayout xlCompactRow
+    End With
+    With ActiveSheet.PivotTables("InvCrnPivotTable").PivotCache
+        .RefreshOnFileOpen = False
+        .MissingItemsLimit = xlMissingItemsDefault
+    End With
+    ActiveSheet.PivotTables("InvCrnPivotTable").RepeatAllLabels xlRepeatLabels
+    ActiveSheet.PivotTables("InvCrnPivotTable").AddDataField ActiveSheet.PivotTables( _
+        "InvCrnPivotTable").PivotFields("Prem"), "Sum of Prem", xlSum
+    ActiveSheet.PivotTables("InvCrnPivotTable").AddDataField ActiveSheet.PivotTables( _
+        "InvCrnPivotTable").PivotFields("Comm"), "Sum of Comm", xlSum
+    With ActiveSheet.PivotTables("InvCrnPivotTable").PivotFields("Currency")
+        .Orientation = xlRowField
+        .Position = 1
+    End With
+    With ActiveSheet.PivotTables("InvCrnPivotTable").PivotFields("TO")
+        .Orientation = xlPageField
+        .Position = 1
+    End With
+End Sub
+
+
+Function OpenFixedWidthFile(sFile As String, lStartRow As Long, vFieldInfo As Variant) As Workbook
+    'A function which opens a textFile with a Fixed Width
+    On Error GoTo ErrHandler
+    Application.Workbooks.OpenText _
+        fileName:=sFile, _
+        StartRow:=lStartRow, _
+        DataType:=xlFixedWidth, _
+        FieldInfo:=vFieldInfo
+        
+    Set OpenFixedWidthFile = ActiveWorkbook
+ExitPoint:
+    Exit Function
+ErrHandler:
+    Set OpenFixedWidthFile = Nothing
+    Resume ExitPoint
+End Function
+
+Sub AddHeaders()
+    'A method which adds headers to data sheets
+
+    'A definition of columns used in the data sheet
+    colNames = Array("rowtype", "postingKey", "account", "document", "text1", "cur", "currency", "text2", _
+    "prodGroup", "segment", "salesChannel", "partnerGroup", "businessType", "LLoB", "country", _
+    "uAmount", "amount", "amType", "text5", "transacType")
+    
+    If IsEmpty(Range("A1")) Then
+    Range("A1").Resize(1, UBound(colNames) + 1).Value = colNames
+    Else: Range("A1").EntireRow.Insert
+    Range("A1").Resize(1, UBound(colNames) + 1).Value = colNames
+    End If
+End Sub
+
+Sub fillInDocumentField(reportType As Integer)
+    'A method which defines the document field for required reports
+
+    'Define variables
+    Dim lastRow As Long
+    Dim DSheet As Worksheet
+    
+    'Depending on a report type, set different Worksheet names
+    If reportType = 1 Then
+        Set DSheet = Worksheets("data_merged")
+    ElseIf reportType = 2 Then
+        Set DSheet = Worksheets("data_reserves_merged")
+    ElseIf reportType = 3 Then
+        Set DSheet = Worksheets("data_merged_estimations")
+    End If
+    
+    lastRow = DSheet.Cells(Rows.Count, 1).End(xlUp).Row
+    Dim i As Long
+    Dim j As Long
+    Dim goOn As Boolean
+    
+    goOn = True
+    i = 2
+    
+    Do Until i > lastRow
+    
+        If i = 2 And (Left(DSheet.Cells(i, 3).Value, 1)) <> "X" Then
+            j = i + 1
+            
+            Do While goOn = True
+                If Left(DSheet.Cells(j, 3).Value, 1) <> "X" Then
+                    j = j + 1
+                    goOn = True
+                Else
+                    DSheet.Cells(i, 4).Value = DSheet.Cells(j, 3).Value
+                    goOn = False
+                End If
+            Loop
+         
+        ElseIf Left(DSheet.Cells(i, 3).Value, 1) = "X" Then
+        DSheet.Cells(i, 4).Value = DSheet.Cells(i, 3).Value
+        
+        Else
+        DSheet.Cells(i, 4).Value = DSheet.Cells(i - 1, 4).Value
+            
+        End If
+        
+        i = i + 1
+    Loop
+End Sub
+
+Sub calculateFields(reportType As Integer)
+    'A method which calculates additional fields in the data file
+
+    'Define variables
+    Dim lastRow As Long
+    Dim DSheet As Worksheet
+    
+    'Depending on which reportType is being created, set different names for the data sheet
+    If reportType = 1 Then
+        Set DSheet = Worksheets("data_merged")
+    ElseIf (reportType = 2) Then
+        Set DSheet = Worksheets("data_reserves_merged")
+    ElseIf reportType = 3 Then
+        Set DSheet = Worksheets("data_merged_estimations")
+    End If
+    
+    lastRow = DSheet.Cells(Rows.Count, 1).End(xlUp).Row
+    Dim i As Long
+    Dim j As Long
+    Dim goOn As Boolean
+    
+    goOn = True
+    i = 2
+    
+    Do Until i > lastRow
+        
+        If Left(DSheet.Cells(i, 4).Value, 4) = "X001" Or Left(DSheet.Cells(i, 4).Value, 4) = "X002" Or _
+        Left(DSheet.Cells(i, 4).Value, 4) = "X003" Or Left(DSheet.Cells(i, 4).Value, 4) = "X004" Then
+        
+            If DSheet.Cells(i, 2).Value = 40 Or DSheet.Cells(i, 2).Value = 1 Or DSheet.Cells(i, 2).Value = 4 Or DSheet.Cells(i, 2).Value = 92 Or DSheet.Cells(i, 2).Value = 93 Then
+                DSheet.Cells(i, 17).Value = Round(-Abs(DSheet.Cells(i, 16).Value), 2)
+            
+                Else
+                DSheet.Cells(i, 17).Value = Round(DSheet.Cells(i, 16).Value, 2)
+            End If
+        
+        ElseIf Left(DSheet.Cells(i, 4).Value, 4) = "X006" Or Left(DSheet.Cells(i, 4).Value, 4) = "X008" Or _
+        Left(DSheet.Cells(i, 4).Value, 4) = "X009" Or Left(DSheet.Cells(i, 4).Value, 4) = "X025" Then
+        
+            If DSheet.Cells(i, 2).Value = 40 Or DSheet.Cells(i, 2).Value = 1 Or DSheet.Cells(i, 2).Value = 4 Then
+                DSheet.Cells(i, 17).Value = Round(-Abs(DSheet.Cells(i, 16).Value), 2)
+            
+                Else
+                DSheet.Cells(i, 17).Value = Round(DSheet.Cells(i, 16).Value, 2)
+                
+            End If
+            
+        End If
+                
+        
+        'Calculate the currency field
+        If i = 2 And DSheet.Cells(i, 6).Value = "" Then
+            j = i + 1
+            
+            Do While goOn = True
+                If DSheet.Cells(j, 6).Value = "" Then
+                    j = j + 1
+                    goOn = True
+                Else
+                    DSheet.Cells(i, 7).Value = DSheet.Cells(j, 6).Value
+                    goOn = False
+                End If
+            Loop
+            
+        ElseIf DSheet.Cells(i, 6).Value <> "" Then
+        DSheet.Cells(i, 7).Value = DSheet.Cells(i, 6).Value
+              
+        Else: DSheet.Cells(i, 7).Value = DSheet.Cells(i - 1, 7).Value
+        
+        End If
+        
+        i = i + 1
+    Loop
+End Sub
+
+Sub createPivotTable(reportType As Integer, dataArray As Variant)
+    'A method which creates the PivotTable for the regular report being created, such as Sales, Estimations and Reserves
+
+    'Declare Variables
+    Dim PSheet As Worksheet
+    Dim DSheet As Worksheet
+    Dim PCache As PivotCache
+    Dim PTable As pivotTable
+    Dim PRange As Range
+    Dim lastRow As Long
+    Dim LastCol As Long
+    
+    Dim csvFilePath As String
+    Dim csvExists As String
+    
+    csvFilePath = "C:\dagama\SalesIncomeCheck.csv"
+    csvExists = Dir(csvFilePath)
+      
+    'Declare Variables
+    On Error Resume Next
+    Application.DisplayAlerts = False
+    Worksheets("PivotTable").Delete
+    Sheets.Add Before:=ActiveSheet
+    ActiveSheet.Name = "PivotTable"
+    Application.DisplayAlerts = True
+    Set PSheet = Worksheets("PivotTable")
+    
+    'Depending on a reportType, set different names to the data sheet
+    If reportType = 1 Then
+        Set DSheet = Worksheets("data_merged")
+    ElseIf reportType = 2 Then
+        Set DSheet = Worksheets("data_reserves_merged")
+    ElseIf reportType = 3 Then
+        Set DSheet = Worksheets("data_merged_estimations")
+    End If
+    
+    'Define Data Range
+    lastRow = DSheet.Cells(Rows.Count, 1).End(xlUp).Row
+    LastCol = DSheet.Cells(1, Columns.Count).End(xlToLeft).Column
+    Set PRange = DSheet.Cells(1, 1).Resize(lastRow, LastCol)
+          
+    'Define Pivot Cache
+    Set PCache = ActiveWorkbook.PivotCaches.Create _
+    (SourceType:=xlDatabase, SourceData:=PRange). _
+    createPivotTable(TableDestination:=PSheet.Cells(2, 2), _
+    TableName:="SalesPivotTable")
+    
+    'Insert Blank Pivot Table
+    Set PTable = PCache.createPivotTable _
+    (TableDestination:=PSheet.Cells(1, 1), TableName:="SalesPivotTable")
+    
+    'Edit PivotTable Properties
+    With ActiveSheet.PivotTables("SalesPivotTable")
+        .ColumnGrand = True
+        .HasAutoFormat = True
+        .DisplayErrorString = False
+        .DisplayNullString = True
+        .EnableDrilldown = True
+        .ErrorString = ""
+        .MergeLabels = False
+        .NullString = ""
+        .PageFieldOrder = 2
+        .PageFieldWrapCount = 0
+        .PreserveFormatting = True
+        .RowGrand = True
+        .SaveData = True
+        .PrintTitles = False
+        .RepeatItemsOnEachPrintedPage = True
+        .TotalsAnnotation = False
+        .CompactRowIndent = 1
+        .InGridDropZones = False
+        .DisplayFieldCaptions = True
+        .DisplayMemberPropertyTooltips = False
+        .DisplayContextTooltips = True
+        .ShowDrillIndicators = True
+        .PrintDrillIndicators = False
+        .AllowMultipleFilters = False
+        .SortUsingCustomLists = True
+        .FieldListSortAscending = False
+        .ShowValuesRow = False
+        .CalculatedMembersInFilters = False
+        .RowAxisLayout xlCompactRow
+    End With
+    '--------------------------------------------
+    ActiveSheet.PivotTables("SalesPivotTable").RepeatAllLabels xlRepeatLabels
+    Range("B5").Select
+    '--------------------------------------------
+    With ActiveSheet.PivotTables("SalesPivotTable")
+        .InGridDropZones = True
+        .RowAxisLayout xlTabularRow
+    End With
+    
+    'Insert Row Fields
+    With ActiveSheet.PivotTables("SalesPivotTable").PivotFields("document")
+    .Orientation = xlRowField
+    .Position = 1
+    End With
+    
+    With ActiveSheet.PivotTables("SalesPivotTable").PivotFields("currency")
+    .Orientation = xlRowField
+    .Position = 2
+    End With
+    
+    With ActiveSheet.PivotTables("SalesPivotTable").PivotFields("amType")
+    .Orientation = xlRowField
+    .Position = 3
+    End With
+    
+    With ActiveSheet.PivotTables("SalesPivotTable").PivotFields("account")
+    .Orientation = xlRowField
+    .Position = 4
+    End With
+            
+    'Insert Data Field
+    ActiveSheet.PivotTables("SalesPivotTable").AddDataField ActiveSheet. _
+        PivotTables("SalesPivotTable").PivotFields("amount"), "Sum of amount", _
+        xlSum
+    
+    Columns("F:F").Select
+    Selection.NumberFormat = "#,##0.00"
+    
+    If (reportType = 1 Or reportType = 3) Then
+        If csvExists <> "" Then
+            OpenCSVSaveAsXLS
+        End If
+        CopyOutput
+    End If
+    
+    checkSumIsNull reportType
+    
+    prepareComparisonSums reportType, dataArray
+    
+    
+End Sub
+
+Sub checkSumIsNull(reportType As Integer)
+    'A method which checks the sum of each and every document, if it is not null, it then points to the row and document details it belongs to and adds it to the PivotTable sheet
+
+    'Define variables
+    Dim dataWS As Worksheet
+    Dim pivotWS As Worksheet
+        
+    Dim i As Long
+    Dim j As Long
+    Dim k As Integer
+    
+    Dim pivotRow As Long
+    
+    Dim lastRow As Long
+    Dim sumAmount As Double
+    
+    Dim condition1 As Long
+    Dim condition2 As Long
+    
+    'Depending on the reportType, set different names for the data sheets     
+    If reportType = 1 Then
+        Set dataWS = Workbooks("data_merged.txt").Worksheets("data_merged")
+        Set pivotWS = Workbooks("data_merged.txt").Worksheets("PivotTable")
+    ElseIf reportType = 2 Then
+        Set dataWS = Workbooks("data_reserves_merged.txt").Worksheets("data_reserves_merged")
+        Set pivotWS = Workbooks("data_reserves_merged.txt").Worksheets("PivotTable")
+    ElseIf reportType = 3 Then
+        Set dataWS = Workbooks("data_merged_estimations.txt").Worksheets("data_merged_estimations")
+        Set pivotWS = Workbooks("data_merged_estimations.txt").Worksheets("PivotTable")
+    End If
+    
+    lastRow = dataWS.Cells(Rows.Count, 1).End(xlUp).Row
+    
+    'Define the header cells names for the location where the reported rows should be placed
+    pivotWS.Cells(23, 9).Value = "Row #"
+    pivotWS.Cells(23, 10).Value = "Account"
+    pivotWS.Cells(23, 11).Value = "Document"
+    pivotWS.Cells(23, 12).Value = "Text1"
+    pivotWS.Cells(23, 13).Value = "Currency"
+    pivotWS.Cells(23, 14).Value = "Text2"
+    pivotWS.Cells(23, 15).Value = "Difference"
+    
+    i = 2
+    j = 0
+    pivotRow = 23
+    
+    If (reportType = 1 Or reportType = 3) Then
+    k = 17
+    ElseIf (reportType = 2) Then
+    k = 16
+    End If
+    
+    Do Until i > lastRow
+    
+        sumAmount = 0
+        If dataWS.Cells(i, 1).Value = 1 And dataWS.Cells(i + 1, 1).Value = 2 Then
+        j = i + 1
+            Do Until dataWS.Cells(j, 1).Value <> 2
+                If dataWS.Cells(j, 2).Value = 40 Or dataWS.Cells(j, 2).Value = 1 Or dataWS.Cells(j, 2).Value = 4 Or dataWS.Cells(j, 2).Value = 92 Or dataWS.Cells(j, 2).Value = 93 Then
+                sumAmount = Round(sumAmount, 2) + Round(-Abs(dataWS.Cells(j, k).Value), 2)
+                
+                Else
+                sumAmount = Round(sumAmount, 2) + Round(Abs(dataWS.Cells(j, k).Value), 2)
+                
+                End If
+            j = j + 1
+            Loop
+
+            'Check if the sumAmount is not zero, if it is not null, then copy values from the leading row preceeding these value rows
+            If sumAmount <> 0 Then
+            pivotRow = pivotRow + 1
+            
+            If (reportType = 2) Then
+            Debug.Print "The failed row is at a row no.: " & j
+            End If
+            
+            'Put the values for the row with a discrepancy into the PivotTable Sheet
+            pivotWS.Cells(pivotRow, 9).Value = j
+            pivotWS.Cells(pivotRow, 10).Value = dataWS.Cells(i, 3).Value
+            pivotWS.Cells(pivotRow, 11).Value = dataWS.Cells(i, 4).Value
+            pivotWS.Cells(pivotRow, 12).Value = dataWS.Cells(i, 5).Value
+            pivotWS.Cells(pivotRow, 13).Value = dataWS.Cells(i, 7).Value
+            pivotWS.Cells(pivotRow, 14).Value = dataWS.Cells(i, 8).Value
+            pivotWS.Cells(pivotRow, 15).Value = sumAmount
+            End If
+        End If
+        
+        i = j
+    Loop
+
+End Sub
+
+Sub prepareComparisonSums(reportType As Integer, dataArray As Variant)
+    'A method which calculates most of the data required for the report finalization
+
+    'Define variables
+    Dim dataWS As Worksheet
+    Dim pivotWS As Worksheet
+    Dim salesWS As Worksheet
+    
+    Dim wbName As String
+    
+    Dim file As String
+    
+    Dim newBook As Workbook
+    
+    Dim r As Integer
+    Dim c As Integer
+    Dim lastRow As Long
+    Dim sumAmount As Double
+    Dim i As Long
+    
+    'Depending on the reportType, set different names for the data sheet
+    If reportType = 1 Then
+        Set dataWS = Workbooks("data_merged.txt").Worksheets("data_merged")
+        Set pivotWS = Workbooks("data_merged.txt").Worksheets("PivotTable")
+        Set salesWS = Workbooks("data_merged.txt").Worksheets("SalesIncomeCheck")
+    ElseIf reportType = 2 Then
+        Set dataWS = Workbooks("data_reserves_merged.txt").Worksheets("data_reserves_merged")
+        Set pivotWS = Workbooks("data_reserves_merged.txt").Worksheets("PivotTable")
+    ElseIf reportType = 3 Then
+        Set dataWS = Workbooks("data_merged_estimations.txt").Worksheets("data_merged_estimations")
+        Set pivotWS = Workbooks("data_merged_estimations.txt").Worksheets("PivotTable")
+        Set salesWS = Workbooks("data_merged_estimations.txt").Worksheets("SalesIncomeCheck")
+    End If
+    
+    lastRow = dataWS.Cells(Rows.Count, 1).End(xlUp).Row
+    
+    'Define variables volume 2
+    Dim argAccount As Range
+    Dim argAccCrit As String
+    Dim account As String
+    Dim account2 As String
+    
+    Dim fullDate As Date
+    Dim day As Integer
+    Dim month As Integer
+    Dim period As String
+    Dim year As String
+    Dim periodNumber As String
+      
+    Dim prohibitedChar1 As String
+    Dim prohibitedChar2 As String
+    
+    Dim argDocument As Range
+    Dim argDocCrit As String
+    
+    Dim argCurrency As Range
+    Dim argCurrCrit As String
+    
+    Dim argAmType As Range
+    Dim argTypeCrit As String
+    Dim argTypeCritNot As String
+    
+    Dim myPivot As pivotTable
+    
+    Set myPivot = pivotWS.PivotTables("SalesPivotTable")
+    
+    Dim argAmount As Range
+    
+    Set argAccount = dataWS.Range("C:C")
+    Set argDocument = dataWS.Range("D:D")
+    Set argCurrency = dataWS.Range("G:G")
+    Set argAmType = dataWS.Range("R:R")
+    Set argAmount = dataWS.Range("Q:Q")
+    
+    'Set the criteria for the account to be the Acoount no. 1100400
+    argAccCrit = 1100400
+    
+    'Set the type criteria
+    argTypeCrit = "*Comm*"
+    argTypeCritNot = "<>*Comm*"
+    
+    pivotWS.Columns("I:L").VerticalAlignment = xlVAlignCenter
+    pivotWS.Columns("I:L").HorizontalAlignment = xlHAlignRight
+    pivotWS.Columns("I:L").ColumnWidth = 12
+    
+    'Set headers for the output destination depending on a reportType
+    pivotWS.Cells(3, 10).Value = "Premium"
+    pivotWS.Cells(3, 11).Value = "Commisssion"
+        
+    If reportType = 1 Then
+        pivotWS.Cells(4, 9).Value = "PLN"
+        pivotWS.Cells(4, 10).Value = "PLN"
+        pivotWS.Cells(4, 11).Value = "EUR"
+        pivotWS.Cells(4, 12).Value = "EUR"
+        
+        pivotWS.Cells(3, 9).Value = "Premium"
+        pivotWS.Cells(3, 10).Value = "Commission"
+        pivotWS.Cells(3, 11).Value = "Premium"
+        pivotWS.Cells(3, 12).Value = "Commission"
+        
+        pivotWS.Cells(5, 15).Value = "Invoices Sums"
+               
+        With pivotWS.Range("O5:Q5")
+            .HorizontalAlignment = xlCenter
+            .VerticalAlignment = xlCenter
+            .Merge
+        End With
+        
+    ElseIf reportType = 3 Then
+        pivotWS.Cells(2, 10).Value = "PLN"
+        pivotWS.Cells(2, 11).Value = "PLN"
+        pivotWS.Cells(2, 12).Value = "EUR"
+        pivotWS.Cells(2, 13).Value = "EUR"
+    ElseIf (reportType = 2) Then
+        pivotWS.Cells(4, 10).Value = "PLN"
+        pivotWS.Cells(4, 11).Value = "EUR"
+        With pivotWS.Range("J4:K4")
+            With .Font
+                .Bold = True
+            End With
+        End With
+    End If
+    
+    If reportType = 1 Then
+        pivotWS.Cells(5, 8).Value = "X001a"
+        pivotWS.Cells(6, 8).Value = "X002a"
+        pivotWS.Cells(7, 8).Value = "X003a"
+        pivotWS.Cells(8, 7).Value = "xTOBI"
+        pivotWS.Cells(8, 8).Value = "X004a"
+        pivotWS.Cells(9, 8).Value = "X004a_TOBI"
+        pivotWS.Cells(10, 7).Value = "xTOBI"
+        pivotWS.Cells(10, 8).Value = "X004c"
+        pivotWS.Cells(11, 8).Value = "X004c_TOBI"
+        pivotWS.Cells(12, 8).Value = "X004e"
+        pivotWS.Cells(13, 8).Value = "X004i"
+        
+        pivotWS.Cells(6, 16).Value = "Prem"
+        pivotWS.Cells(6, 17).Value = "Comm"
+        
+        pivotWS.Cells(7, 15).Value = "EUR"
+        pivotWS.Cells(8, 15).Value = "PLN"
+        
+    ElseIf reportType = 2 Then
+        pivotWS.Cells(5, 9).Value = "X006"
+        pivotWS.Cells(6, 9).Value = "X008i"
+        pivotWS.Cells(7, 9).Value = "X009"
+        pivotWS.Cells(8, 9).Value = "X009i"
+        pivotWS.Cells(9, 9).Value = "X009u"
+        pivotWS.Cells(10, 9).Value = "X009ui"
+        pivotWS.Cells(11, 9).Value = "X025i"
+    ElseIf reportType = 3 Then
+        pivotWS.Cells(4, 9).Value = "X001"
+        pivotWS.Cells(5, 9).Value = "X004"
+        pivotWS.Cells(6, 9).Value = "SUM 1"
+        pivotWS.Cells(7, 9).Value = "X001b"
+        pivotWS.Cells(8, 9).Value = "X002b"
+        pivotWS.Cells(9, 9).Value = "X003b"
+        pivotWS.Cells(10, 9).Value = "X004b"
+        pivotWS.Cells(11, 9).Value = "X004d"
+        pivotWS.Cells(12, 9).Value = "X004f"
+        pivotWS.Cells(13, 9).Value = "X004j"
+        
+        pivotWS.Cells(14, 9).Value = "Total"
+        
+        pivotWS.Cells(16, 9).Value = "SalesIncome"
+        
+        pivotWS.Cells(18, 9).Value = "Check01"
+        pivotWS.Cells(19, 9).Value = "Check02"
+        
+        pivotWS.Cells(7, 16).Value = "EUR"
+        pivotWS.Cells(8, 16).Value = "PLN"
+        
+        pivotWS.Cells(6, 17).Value = "Sum Comm"
+        pivotWS.Cells(6, 17).Value = "Sum Prem"
+        
+
+    End If
+    
+    '--------Do if ReportType is 1--------
+    'Calculate positive or negative values for the sum depending on whether the amount is a Premium or a Commission
+    If reportType = 1 Then
+    For r = 5 To 13
+        For c = 9 To 12
+        sumAmount = 0
+            If c = 9 Or c = 11 Then
+                argDocCrit = pivotWS.Cells(r, 8).Value
+                argCurrCrit = pivotWS.Cells(4, c).Value
+                
+                For i = 2 To lastRow
+                    If InStr(1, dataWS.Cells(i, 3).Value, "1100400") > 0 And InStr(1, dataWS.Cells(i, 4).Value, argDocCrit) > 0 And InStr(1, dataWS.Cells(i, 7).Value, argCurrCrit) > 0 _
+                    And (InStr(1, dataWS.Cells(i, 18).Value, "GPW") > 0 Or InStr(1, dataWS.Cells(i, 18).Value, "Prem") > 0) Then
+                    sumAmount = sumAmount + dataWS.Cells(i, 17).Value
+                    End If
+                Next
+                pivotWS.Cells(r, c).NumberFormat = "#,##0.00"
+                pivotWS.Cells(r, c).Value = sumAmount
+                
+            Else
+                argDocCrit = pivotWS.Cells(r, 8).Value
+                argCurrCrit = pivotWS.Cells(4, c).Value
+                
+                For i = 2 To lastRow
+                    If InStr(1, dataWS.Cells(i, 3).Value, "1100400") > 0 And InStr(1, dataWS.Cells(i, 4).Value, argDocCrit) > 0 And InStr(1, dataWS.Cells(i, 7).Value, argCurrCrit) > 0 _
+                    And ((InStr(1, dataWS.Cells(i, 18).Value, "GPW") = 0 Or InStr(1, dataWS.Cells(i, 18).Value, "Prem") = 0) And InStr(1, dataWS.Cells(i, 18).Value, "Comm") > 0) Then
+                    sumAmount = sumAmount + dataWS.Cells(i, 17).Value
+                    End If
+                Next
+                pivotWS.Cells(r, c).NumberFormat = "#,##0.00"
+                pivotWS.Cells(r, c).Value = sumAmount
+            End If
+        Next
+    Next
+    
+    
+    For i = 2 To 20
+            If salesWS.Cells(i, 2) = "X004a" And salesWS.Cells(i, 3) = "TOBI" And salesWS.Cells(i, 4) = "PLN" Then
+            pivotWS.Cells(9, 9).Value = salesWS.Cells(i, 6).Value
+            pivotWS.Cells(9, 10).Value = Round(salesWS.Cells(i, 7).Value * -1, 2)
+            ElseIf salesWS.Cells(i, 2) = "X004a" And salesWS.Cells(i, 3) = "TOBI" And salesWS.Cells(i, 4) = "EUR" Then
+            pivotWS.Cells(9, 11).Value = salesWS.Cells(i, 6).Value
+            pivotWS.Cells(9, 12).Value = Round(salesWS.Cells(i, 7).Value * -1, 2)
+            
+            ElseIf salesWS.Cells(i, 2) = "X004c" And salesWS.Cells(i, 3) = "TOBI" And salesWS.Cells(i, 4) = "PLN" Then
+            pivotWS.Cells(11, 9).Value = salesWS.Cells(i, 6).Value
+            pivotWS.Cells(11, 10).Value = Round(salesWS.Cells(i, 7).Value * -1, 2)
+            ElseIf salesWS.Cells(i, 2) = "X004a" And salesWS.Cells(i, 3) = "TOBI" And salesWS.Cells(i, 4) = "EUR" Then
+            pivotWS.Cells(11, 11).Value = salesWS.Cells(i, 6).Value
+            pivotWS.Cells(11, 12).Value = Round(salesWS.Cells(i, 7).Value * -1, 2)
+            End If
+    Next
+    
+        pivotWS.Cells(8, 7).Value = ""
+        pivotWS.Cells(10, 7).Value = ""
+        pivotWS.Cells(8, 8).Value = "X004a_xTOBI"
+        pivotWS.Cells(10, 8).Value = "X004c_xTOBI"
+        pivotWS.Cells(14, 8).Value = "Total"
+        
+        pivotWS.Range("P7:Q8").NumberFormat = "#,##0.00"
+        
+        'Inputting the data from the dataArray which is sent from the method working with the Invoices file
+        
+        pivotWS.Cells(7, 16).Value = dataArray(0)
+        pivotWS.Cells(7, 17).Value = dataArray(1)
+        pivotWS.Cells(8, 16).Value = dataArray(2)
+        pivotWS.Cells(8, 17).Value = dataArray(3)
+        
+        pivotWS.Cells(19, 8).Value = "Invoices"
+        pivotWS.Cells(19, 9).Value = pivotWS.Cells(8, 16).Value
+        pivotWS.Cells(19, 10).Value = pivotWS.Cells(8, 17).Value
+        
+        pivotWS.Cells(19, 11).Value = pivotWS.Cells(7, 16).Value
+        pivotWS.Cells(19, 12).Value = pivotWS.Cells(7, 17).Value
+        
+        With pivotWS.Range("I19:L19")
+            With .Font
+            .Color = RGB(0, 112, 192)
+            .Bold = True
+            End With
+        End With
+        
+        With pivotWS.Range("I20:L20")
+            With .Font
+            .Color = vbRed
+            .Bold = True
+            End With
+        End With
+        
+        With pivotWS.Range("I17:L17")
+            With .Font
+            .Color = vbRed
+            .Bold = True
+            End With
+        End With
+        
+        pivotWS.Columns("P:Q").ColumnWidth = 12
+        
+        pivotWS.Columns("H").ColumnWidth = 12
+        
+        pivotWS.Columns("B").ColumnWidth = 14
+        pivotWS.Columns("D").ColumnWidth = 16
+        
+    '--------End if reportType is 1--------
+    '--------Do if reportType is 2--------
+    'Calculating the data from the PivotTable for the reportType 2
+    ElseIf reportType = 2 Then
+    
+            Range("J5").Select
+            Application.CutCopyMode = False
+            ActiveCell.FormulaR1C1 = _
+                "=IFERROR(SUM(GETPIVOTDATA(""amount"",R2C2,""account"",1221050,""document"",""X006"",""currency"",""PLN""),GETPIVOTDATA(""amount"",R2C2,""account"",1221051,""document"",""X006"",""currency"",""PLN"")),""No data"")"
+        
+            Range("K5").Select
+            Application.CutCopyMode = False
+            ActiveCell.FormulaR1C1 = _
+                "=IFERROR(SUM(GETPIVOTDATA(""amount"",R2C2,""account"",1221050,""document"",""X006"",""currency"",""EUR""),GETPIVOTDATA(""amount"",R2C2,""account"",1221051,""document"",""X006"",""currency"",""EUR"")),""No data"")"
+        
+            Range("J6").Select
+            Application.CutCopyMode = False
+            ActiveCell.FormulaR1C1 = _
+                "=IFERROR(SUM(GETPIVOTDATA(""amount"",R2C2,""account"",1211000,""document"",""X008i"",""currency"",""PLN"",""amType"",""UEP-IAS""),GETPIVOTDATA(""amount"",R2C2,""account"",1211000,""document"",""X008i"",""currency"",""PLN"",""amType"",""URP-IAS"")),""No data"")"
+        
+            Range("K6").Select
+            Application.CutCopyMode = False
+            ActiveCell.FormulaR1C1 = _
+                "=IFERROR(GETPIVOTDATA(""amount"",R2C2,""account"",1211000,""document"",""X008i"",""currency"",""EUR"",""amType"",""UEP-IAS""),""No data"")"
+        
+            Range("J7").Select
+            Application.CutCopyMode = False
+            ActiveCell.FormulaR1C1 = _
+                "=IFERROR(GETPIVOTDATA(""amount"",R2C2,""account"",1221200,""document"",""X009"",""currency"",""PLN""),""No data"")"
+        
+            Range("K7").Select
+            Application.CutCopyMode = False
+            ActiveCell.FormulaR1C1 = _
+                "=IFERROR(GETPIVOTDATA(""amount"",R2C2,""account"",1221200,""document"",""X009"",""currency"",""EUR""),""No data"")"
+        
+            Range("J8").Select
+            Application.CutCopyMode = False
+            ActiveCell.FormulaR1C1 = _
+                "=IFERROR(GETPIVOTDATA(""amount"",R2C2,""account"",1221201,""document"",""X009i"",""currency"",""PLN""),""No data"")"
+        
+            Range("K8").Select
+            Application.CutCopyMode = False
+            ActiveCell.FormulaR1C1 = _
+                "=IFERROR(GETPIVOTDATA(""amount"",R2C2,""account"",1221201,""document"",""X009i"",""currency"",""EUR""),""No data"")"
+        
+            Range("J9").Select
+            Application.CutCopyMode = False
+            ActiveCell.FormulaR1C1 = _
+                "=IFERROR(GETPIVOTDATA(""amount"",R2C2,""account"",1221280,""document"",""X009u"",""currency"",""PLN""),""No data"")"
+        
+            Range("K9").Select
+            Application.CutCopyMode = False
+            ActiveCell.FormulaR1C1 = _
+                "=IFERROR(GETPIVOTDATA(""amount"",R2C2,""account"",1221280,""document"",""X009u"",""currency"",""EUR""),""No data"")"
+        
+            Range("J10").Select
+            Application.CutCopyMode = False
+            ActiveCell.FormulaR1C1 = _
+                "=IFERROR(GETPIVOTDATA(""amount"",R2C2,""account"",1221281,""document"",""X009ui"",""currency"",""PLN""),""No data"")"
+        
+            Range("K10").Select
+            Application.CutCopyMode = False
+            ActiveCell.FormulaR1C1 = _
+                "=IFERROR(GETPIVOTDATA(""amount"",R2C2,""account"",1221281,""document"",""X009ui"",""currency"",""EUR""),""No data"")"
+            
+            Range("J11").Select
+            Application.CutCopyMode = False
+            ActiveCell.FormulaR1C1 = _
+                "=IFERROR(GETPIVOTDATA(""amount"",R2C2,""account"",1451102,""document"",""X025i"",""currency"",""PLN""),""No data"")"
+        
+            Range("K11").Select
+            Application.CutCopyMode = False
+            ActiveCell.FormulaR1C1 = _
+                "=IFERROR(GETPIVOTDATA(""amount"",R2C2,""account"",1451102,""document"",""X025i"",""currency"",""EUR""),""No data"")"
+    '--------End if reportType is 2--------
+    '--------Do if ReportType is 3--------
+    ElseIf reportType = 3 Then
+        For r = 4 To 13
+            For c = 10 To 13
+            sumAmount = 0
+                If c = 10 Or c = 12 Then
+                    argDocCrit = pivotWS.Cells(r, 9).Value
+                    argCurrCrit = pivotWS.Cells(2, c).Value
+                    
+                    For i = 2 To lastRow
+                        If InStr(1, dataWS.Cells(i, 3).Value, "1100400") > 0 And (dataWS.Cells(i, 4).Value = argDocCrit And Right(dataWS.Cells(i, 4).Value, 1) <> "x") And InStr(1, dataWS.Cells(i, 7).Value, argCurrCrit) > 0 _
+                        And (InStr(1, dataWS.Cells(i, 18).Value, "GPW") > 0 Or InStr(1, dataWS.Cells(i, 18).Value, "Pre") > 0) Then
+                        sumAmount = Round(sumAmount, 2) + Round(dataWS.Cells(i, 17).Value, 2)
+                        Debug.Print sumAmount
+                        End If
+                    Next
+                    pivotWS.Cells(r, c).NumberFormat = "#,##0.00"
+                    pivotWS.Cells(r, c).Value = sumAmount
+                    
+                Else
+                    argDocCrit = pivotWS.Cells(r, 9).Value
+                    argCurrCrit = pivotWS.Cells(2, c).Value
+                    
+                    For i = 2 To lastRow
+                        If InStr(1, dataWS.Cells(i, 3).Value, "1100400") > 0 And (dataWS.Cells(i, 4).Value = argDocCrit And Right(dataWS.Cells(i, 4).Value, 1) <> "x") And InStr(1, dataWS.Cells(i, 7).Value, argCurrCrit) > 0 _
+                        And ((InStr(1, dataWS.Cells(i, 18).Value, "GPW") = 0 Or InStr(1, dataWS.Cells(i, 18).Value, "Pre") = 0) And InStr(1, dataWS.Cells(i, 18).Value, "Com") > 0) Then
+                        sumAmount = Round(sumAmount, 2) + Round(dataWS.Cells(i, 17).Value, 2)
+                        End If
+                    Next
+                    pivotWS.Cells(r, c).NumberFormat = "#,##0.00"
+                    pivotWS.Cells(r, c).Value = sumAmount
+                End If
+            Next
+        Next
+    '--------End if reportType is 3--------
+    End If
+    
+    
+    pivotWS.Cells(16, 10).NumberFormat = "#,##0.00"
+    pivotWS.Cells(16, 11).NumberFormat = "#,##0.00"
+    pivotWS.Cells(16, 12).NumberFormat = "#,##0.00"
+    pivotWS.Cells(16, 13).NumberFormat = "#,##0.00"
+    
+    'Format cells formatting
+    With pivotWS.Range("I14:L14")
+        With .Font
+            .Color = RGB(146, 208, 80)
+            .Bold = True
+        End With
+    End With
+    
+    With pivotWS.Range("I5:L14")
+        With .NumberFormat = "#,##0.00"
+        End With
+    End With
+    
+    If (reportType = 3) Then
+        With pivotWS.Range("J6:M6")
+            With .Font
+                .Color = RGB(146, 208, 80)
+                .Bold = True
+            End With
+        End With
+    End If
+     
+    With pivotWS.Range("I16:L16")
+        With .Font
+            .Color = RGB(0, 112, 192)
+            .Bold = True
+        End With
+    End With
+    
+    With pivotWS.Range("I2:L4")
+        With .Font
+            .Bold = True
+        End With
+    End With
+    
+    With pivotWS.Range("H4:H25")
+        With .Font
+            .Bold = True
+        End With
+    End With
+    
+    With pivotWS.Range("I23:O23")
+        With .Font
+            .Bold = True
+        End With
+    End With
+    
+    With pivotWS.Range("I18:L18")
+        With .Font
+            .Color = vbRed
+            .Bold = True
+        End With
+    End With
+    
+    With pivotWS.Range("I23:O24")
+        .HorizontalAlignment = xlCenter
+        .EntireRow.AutoFit
+    End With
+    
+    With pivotWS.Columns("O")
+     .ColumnWidth = 11
+    End With
+    
+    With pivotWS.Columns("N")
+     .ColumnWidth = 25
+    End With
+    
+    With pivotWS.Columns("I")
+     .ColumnWidth = 12
+    End With
+    
+    Columns("I:I").Select
+    Selection.EntireColumn.AutoFit
+    
+    pivotWS.Activate
+    
+    If reportType = 1 Or reportType = 3 Then
+        TotalSum reportType
+    End If
+    
+    If (reportType = 1) Then
+        wbName = "AccountancyReport_sales"
+    
+    ElseIf (reportType = 3) Then
+        wbName = "AccountacyReport_estimations"
+    
+    ElseIf (reportType = 2) Then
+        wbName = "AccountancyReport_reserves"
+    
+    End If
+       
+    fullDate = Date
+    
+    'Setting the number of the currentDate to be added to the fileName
+        
+    periodNumber = Format(fullDate, "YYYYMMdd")
+    
+    Application.DisplayAlerts = False
+    
+    ActiveWorkbook.SaveAs ("C:\dagama\" & wbName & "_" & periodNumber), FileFormat:=51, AccessMode:=xlExclusive, ConflictResolution:=Excel.XlSaveConflictResolution.xlLocalSessionChanges
+    
+    ActiveWorkbook.Save
+    
+    Application.DisplayAlerts = True
+    
+    Set dataWS = Nothing
+    Set pivotWS = Nothing
+    
+    If reportType = 1 Or reportType = 3 Then
+        Set salesWS = Nothing
+    End If
+    
+End Sub
+
+Sub CopyOutput()
+    'A method to copy the data from the SalesIncome file to the PivotTable sheet in the main report
+    Dim wb1 As Workbook, wb2 As Workbook
+    Dim Ret1, Ret2
+    
+    Dim xlsmFilePath As String
+    Dim xlsmFileExists As String
+    
+    xlsmFilePath = "C:\dagama\SalesIncomeCheck.xlsx"
+    xlsmFileExists = Dir(xlsmFilePath)
+ 
+    Set wb1 = ActiveWorkbook
+    Sheets.Add.Name = "SalesIncomeCheck"
+ 
+    '~~> Get the File
+    'Ret1 = Application.GetOpenFilename("Excel Files (*.xls*), *.xls*", _
+    ', "Please select the SalesIncomeCheck file")
+    'If Ret1 = False Then Exit Sub
+ 
+    If xlsmFileExists <> "" Then
+        Set wb2 = Workbooks.Open("C:\dagama\SalesIncomeCheck.xlsx")
+        
+        wb2.Sheets(1).Range("A1:G17").Copy Destination:=wb1.Worksheets("SalesIncomeCheck").Cells
+        
+        wb1.Activate
+        Columns("A:G").Select
+        Selection.EntireColumn.AutoFit
+    
+        wb2.Close SaveChanges:=False
+        Set wb2 = Nothing
+    End If
+    
+    Set wb1 = Nothing
+End Sub
+
+Sub OpenCSVSaveAsXLS()
+    'Open and save SalesIncomeCheck.csv file as a xlsx
+    Dim csvWorkbook As Workbook
+    
+    Application.DisplayAlerts = False
+    
+    Workbooks.OpenText "C:\dagama\SalesIncomeCheck.csv", Semicolon:=True, Local:=True
+    'Workbooks.Open Filename:="C:\dagama\SalesIncomeCheck.csv"
+    
+    ActiveWorkbook.SaveAs ("C:\dagama\SalesIncomeCheck"), FileFormat:=51, AccessMode:=xlExclusive, ConflictResolution:=Excel.XlSaveConflictResolution.xlLocalSessionChanges
+    
+    ActiveWorkbook.Save
+    Application.DisplayAlerts = True
+    
+    ActiveWorkbook.Close SaveChanges:=False
+End Sub
+
+Function TotalSum(reportType As Integer)
+'
+' TotalSum method which calculates the total sum for the given reportType
+
+    Dim salesSheet As Worksheet
+    Dim pivotSheet As Worksheet
+    Dim lastRow As Long
+    Dim i As Integer
+    
+    Set salesSheet = ActiveWorkbook.Sheets("SalesIncomeCheck")
+    Set pivotSheet = ActiveWorkbook.Sheets("PivotTable")
+    
+    lastRow = salesSheet.Cells(Rows.Count, 1).End(xlUp).Row
+ 
+    If reportType = 3 Then
+        Range("J6").Select
+        ActiveCell.FormulaR1C1 = "=SUM(R[-2]C:R[-1]C)"
+        
+        Range("J6").Select
+        Selection.AutoFill Destination:=Range("J6:M6"), Type:=xlFillDefault
+        Range("J6:M6").Select
+    End If
+    
+    pivotSheet.Cells(14, 8).Value = "Total"
+    Range("I14").Select
+    
+    If reportType = 1 Then
+        ActiveCell.FormulaR1C1 = "=SUM(R[-9]C:R[-1]C)"
+    ElseIf reportType = 3 Then
+        ActiveCell.FormulaR1C1 = "=SUM(R[-7]C:R[-1]C)"
+    End If
+    
+    
+    Range("I14").Select
+    Selection.AutoFill Destination:=Range("I14:L14"), Type:=xlFillDefault
+   
+    Range("H16").Select
+    ActiveCell.FormulaR1C1 = "SalesIncome"
+    
+    For i = 1 To lastRow
+        If (salesSheet.Cells(i, 4) = "PLN" And salesSheet.Cells(i, 2) = "SalesIncome" And salesSheet.Cells(i, 3) = "Total") Then
+        pivotSheet.Cells(16, 9).Value = salesSheet.Cells(i, 6).Value
+        pivotSheet.Cells(16, 10).Value = salesSheet.Cells(i, 7).Value * -1
+        
+        ElseIf (salesSheet.Cells(i, 4) = "EUR" And salesSheet.Cells(i, 2) = "SalesIncome" And salesSheet.Cells(i, 3) = "Total") Then
+        pivotSheet.Cells(16, 11).Value = salesSheet.Cells(i, 6).Value
+        pivotSheet.Cells(16, 12).Value = salesSheet.Cells(i, 7).Value * -1
+        End If
+    Next
+    
+        If pivotSheet.Cells(16, 9).Value = "" Then
+        pivotSheet.Cells(16, 9).Value = 0
+        End If
+        
+        If pivotSheet.Cells(16, 10).Value = "" Then
+        pivotSheet.Cells(16, 10).Value = 0
+        End If
+        
+        If pivotSheet.Cells(16, 11).Value = "" Then
+        pivotSheet.Cells(16, 11).Value = 0
+        End If
+        
+        If pivotSheet.Cells(16, 12).Value = "" Then
+        pivotSheet.Cells(16, 12).Value = 0
+        End If
+    
+    pivotSheet.Activate
+    
+    If reportType = 1 Then
+        Range("H17").Select
+        ActiveCell.FormulaR1C1 = "Check01"
+        
+        Range("I17").Select
+        Application.CutCopyMode = False
+        ActiveCell.FormulaR1C1 = "=R[-3]C-R[-1]C"
+        
+        Range("I17").Select
+        Selection.AutoFill Destination:=Range("I17:L17"), Type:=xlFillDefault
+        
+        '----------------------------------------
+        Range("H20").Select
+        ActiveCell.FormulaR1C1 = "Check02"
+        
+        Range("I20").Select
+        Application.CutCopyMode = False
+        ActiveCell.FormulaR1C1 = "=R[-6]C-R[-1]C"
+        
+        Range("J20").Select
+        Application.CutCopyMode = False
+        ActiveCell.FormulaR1C1 = "=R[-6]C+R[-1]C"
+        
+        Range("K20").Select
+        Application.CutCopyMode = False
+        ActiveCell.FormulaR1C1 = "=R[-6]C-R[-1]C"
+        
+        Range("L20").Select
+        Application.CutCopyMode = False
+        ActiveCell.FormulaR1C1 = "=R[-6]C+R[-1]C"
+        Debug.Print "Sum summarized."
+             
+    ElseIf reportType = 3 Then
+                
+        Range("J18").Select
+        Application.CutCopyMode = False
+        ActiveCell.FormulaR1C1 = "=R[-4]C+R[-2]C"
+        
+        Range("J18").Select
+        Selection.AutoFill Destination:=Range("J18:M18"), Type:=xlFillDefault
+        Range("J18:M18").Select
+        
+        Range("J19").Select
+        Application.CutCopyMode = False
+        ActiveCell.FormulaR1C1 = "=R[-13]C-R[-3]C"
+        
+        Range("J19").Select
+        Selection.AutoFill Destination:=Range("J19:M19"), Type:=xlFillDefault
+        Range("J19:M19").Select
+    End If
+    
+    
+    
+End Function
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
